@@ -181,7 +181,7 @@ def plot_frames_activ(
     )
     if z_score is not None:
         masked_z = z_score[slices][bbox].squeeze()
-        masked_z[abs(masked_z) < z_thresh] = np.nan
+        masked_z[masked_z < z_thresh] = np.nan
         im = ax.imshow(
             masked_z,
             alpha=1,

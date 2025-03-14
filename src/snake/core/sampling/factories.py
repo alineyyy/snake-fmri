@@ -440,14 +440,14 @@ def stacked_epi_factory(
     rng: int | None | np.random.Generator = None,
 ) -> np.ndarray:
     """Generate a VDS stack of fully sampled EPI trajectory."""
-    sizeZ = shape[0]
+    sizeZ = shape[0] #shape[-1]
     z_index = get_kspace_slice_loc(sizeZ, acsz, accelz, pdf=pdfz, rng=rng, order=orderz)
 
     epi_3d_coord = stacked_epi2d(
         shape,
         slice_locs=z_index,
-        phase_locs=np.arange(shape[1]),
-        freq_locs=np.arange(shape[2]),
+        phase_locs=np.arange(shape[1]), #shape[0]
+        freq_locs=np.arange(shape[2]), #shape[1]
     )
 
     epi3d_stacked = epi_3d_coord.reshape(len(z_index), shape[1] * shape[2], 3)

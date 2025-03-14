@@ -413,6 +413,46 @@ class CartesianFrameDataLoader(MRDLoader):
         mask[traj_locs] = True
         return mask, kspace
 
+class SliceDataloader(MRDLoader):
+    """Load slice MRD files k-space frames iteratively."""
+    def __init__(self,
+                 frame_dl: MRDLoader,
+                 ): 
+        super().__init__(
+            filename=frame_dl._filename,
+            dataset_name=frame_dl._dataset_name,
+            writeable=frame_dl._writeable,
+            swmr=frame_dl._swmr,
+        )
+        #replace by adding an attribute of if_cartesian, also need to change on pysap
+        self.frame = frame_dl
+        self.is_cartesian = isinstance(frame_dl, CartesianFrameDataLoader)
+        self.is_non_cartesian = isinstance(frame_dl, NonCartesianFrameDataLoader)
+        self.get_kspace_frame = self._get_kspace_frame
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.frame, name)
+
+    @property
+    def n_frames(self) -> int:
+        """Number of frames."""
+        return self.frame.n_acquisition 
+
+    @property
+    def shape(self) -> tuple[int, int]:
+        """Shape of the volume."""
+        return self.frame.shape[:2]
+
+    def _get_kspace_frame(
+        self, idx: int, 
+         ) -> tuple[NDArray[np.float32], NDArray[np.complex64]]:
+        """Get the k-space frame."""
+        n_acq_per_frame = self.frame.n_acquisition // self.frame.n_frames
+        traj, data = self.frame.get_kspace_frame(idx // self.frame.n_shots)
+        traj =  traj.reshape(n_acq_per_frame, -1, 3)
+        data = data.reshape(self.frame.n_coils, n_acq_per_frame, -1)
+        shot_loc = idx%self.frame.n_shots
+        return traj[shot_loc,:,:2], data[:,shot_loc,:]
 
 class NonCartesianFrameDataLoader(MRDLoader):
     """Non Cartesian Dataloader.

@@ -303,7 +303,7 @@ class RotatedStackOfSpiralSampler(StackOfSpiralSampler):
     """
 
     __sampler_name__ = "rotated-stack-of-spiral"
-    rotate_frame_angle: AngleRotation | int = 0
+    rotate_frame_angle: AngleRotation | float = 0.0
     frame_index: int = 0
 
     def fix_angle_rotation(
@@ -364,10 +364,14 @@ class EPI3dAcquisitionSampler(BaseSampler):
         dataset: mrd.Dataset,
         sim_conf: SimConfig,
     ) -> mrd.Dataset:
+        slice_dim = sim_conf.shape[0]
+        phase_dim = sim_conf.shape[1]
+        readout_dim = sim_conf.shape[2]
+        
         """Create the acquisitions associated with this sampler."""
         single_frame = self._single_frame(sim_conf)
         n_shots_frame = single_frame.shape[0]
-        n_lines = sim_conf.shape[1]
+        n_lines = [1]
 
         n_samples = single_frame.shape[1]
         TR_vol_ms = sim_conf.seq.TR * single_frame.shape[0]
@@ -422,9 +426,9 @@ class EPI3dAcquisitionSampler(BaseSampler):
                 (
                     "data",
                     np.float32,
-                    (sim_conf.hardware.n_coils * sim_conf.shape[2] * 2,),
+                    (sim_conf.hardware.n_coils * sim_conf.shape[2] * 2,), #n_coil*single_frame[1]*2
                 ),
-                ("traj", np.uint32, (sim_conf.shape[2] * 3,)),
+                ("traj", np.uint32, (sim_conf.shape[2] * 3,)), #single_frame[1]*3
             ]
         )
 
@@ -465,7 +469,7 @@ class EPI3dAcquisitionSampler(BaseSampler):
             for j, epi2d in enumerate(stack_epi3d):
                 epi2d_r = epi2d.reshape(
                     sim_conf.shape[1], sim_conf.shape[2], 3
-                )  # reorder to have
+                )  # reorder to have why reshape to image shape here???
                 for k, readout in enumerate(epi2d_r):
                     flags = 0
                     if k == 0:
@@ -501,7 +505,7 @@ class EPI3dAcquisitionSampler(BaseSampler):
                             read_dir=dir_cos(readout[0], readout[1]),
                             active_channels=sim_conf.hardware.n_coils,
                             available_channels=sim_conf.hardware.n_coils,
-                            number_of_samples=len(readout),
+                            number_of_samples=len(readout),#what should readout be?? 
                             trajectory_dimensions=3,
                         ),
                         dtype=mrd.hdf5.acquisition_header_dtype,

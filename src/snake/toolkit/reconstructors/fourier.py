@@ -56,7 +56,7 @@ def init_nufft(
     """Initialize the NUFFT operator from the data_loader."""
     from mrinufft import get_operator
 
-    smaps = data_loader.get_smaps()
+    smaps = data_loader.get_smaps().squeeze() if data_loader.get_smaps() is not None else None
     shape = data_loader.shape
     traj, _ = data_loader.get_kspace_frame(0)
 
