@@ -69,28 +69,28 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                 )[0, :, :2]
                 data = np.reshape(data, (data.shape[0], data_loader.n_shots, -1))
                 for j in range(data.shape[1]):
-                    x_cg = minimize(
-                        fun = lambda x, b=data[:,j]: np.linalg.norm(
-                            nufft_operator.op(x.reshape(data_loader.shape[:2])) - b, 
-                        )**2, 
-                        x0=x_init[:,:,j].ravel(),
-                        method="CG",
-                        jac=lambda x, b=data[:,j]: nufft_operator.data_consistency(
-                            x.reshape(data_loader.shape[:2]), b
-                            ).ravel(),  
-                        tol=self.tol,
-                        options={"gtol": self.tol, "maxiter": self.max_iter}
-                    )
-                    loss_list.append(x_cg.fun)
-                    x_iter[:,:,j] = x_cg.x.reshape(data_loader.shape[:2])
-                    # x_iter[:,:,j],loss = cg(
-                    #     nufft_operator, 
-                    #     data[:,j], 
-                    #     x_init=x_init[:,:,j], 
-                    #     num_iter=self.max_iter, 
-                    #     tol=self.tol
+                    # x_cg = minimize(
+                    #     fun = lambda x, b=data[:,j]: np.linalg.norm(
+                    #         nufft_operator.op(x.reshape(data_loader.shape[:2])) - b, 
+                    #     )**2, 
+                    #     x0=x_init[:,:,j].ravel(),
+                    #     method="CG",
+                    #     jac=lambda x, b=data[:,j]: nufft_operator.data_consistency(
+                    #         x.reshape(data_loader.shape[:2]), b
+                    #         ).ravel(),  
+                    #     tol=self.tol,
+                    #     options={"gtol": self.tol, "maxiter": self.max_iter}
                     # )
-                    # loss_list.append(loss)
+                    # loss_list.append(x_cg.fun)
+                    # x_iter[:,:,j] = x_cg.x.reshape(data_loader.shape[:2])
+                    x_iter[:,:,j],loss = cg(
+                        nufft_operator, 
+                        data[:,j], 
+                        x_init=x_init[:,:,j], 
+                        num_iter=self.max_iter, 
+                        tol=self.tol
+                    )
+                    loss_list.append(loss)
             else:
                 nufft_operator.samples = traj.reshape(
                     data_loader.n_shots, -1, traj.shape[-1]
@@ -123,27 +123,27 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                 )[0, :, :2]
                 data = np.reshape(data, (data.shape[0], data_loader.n_shots, -1))
                 for j in range(data.shape[1]):
-                    x_cg = minimize(
-                        fun = lambda x, b=data[:,j]: np.linalg.norm(
-                            nufft_operator.op(x.reshape(data_loader.shape[:2])) - b, 
-                        )**2, 
-                        x0=x_init[:,:,j].ravel(),
-                        method="CG",
-                        jac=lambda x, b=data[:,j]: nufft_operator.data_consistency(
-                            x.reshape(data_loader.shape[:2]), b).ravel(),  
-                        tol=self.tol,
-                        options={"maxiter": self.max_iter}
-                    )
-                    loss_list.append(x_cg.fun)
-                    x_iter[:,:,j] = x_cg.x.reshape(data_loader.shape[:2])
-                    # x_iter[:,:,j],loss = cg(
-                    #     nufft_operator, 
-                    #     data[:,j], 
-                    #     x_init=x_init[:,:,j], 
-                    #     num_iter=self.max_iter, 
-                    #     tol=self.tol
+                    # x_cg = minimize(
+                    #     fun = lambda x, b=data[:,j]: np.linalg.norm(
+                    #         nufft_operator.op(x.reshape(data_loader.shape[:2])) - b, 
+                    #     )**2, 
+                    #     x0=x_init[:,:,j].ravel(),
+                    #     method="CG",
+                    #     jac=lambda x, b=data[:,j]: nufft_operator.data_consistency(
+                    #         x.reshape(data_loader.shape[:2]), b).ravel(),  
+                    #     tol=self.tol,
+                    #     options={"maxiter": self.max_iter}
                     # )
-                    # loss_list.append(loss)
+                    # loss_list.append(x_cg.fun)
+                    # x_iter[:,:,j] = x_cg.x.reshape(data_loader.shape[:2])
+                    x_iter[:,:,j],loss = cg(
+                        nufft_operator, 
+                        data[:,j], 
+                        x_init=x_init[:,:,j], 
+                        num_iter=self.max_iter, 
+                        tol=self.tol
+                    )
+                    loss_list.append(loss)
             else:
                 nufft_operator.samples = traj.reshape(
                     data_loader.n_shots, -1, traj.shape[-1]

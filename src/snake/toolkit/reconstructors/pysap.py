@@ -38,7 +38,7 @@ def _reconstruct_cartesian_frame(
     """Reconstruct a single frame."""
     with (
         array_from_shm(final_props) as final_images,
-        CartesianFrameDataLoader(filename) as data_loader,
+        CartesianFrameDataLoader(filename, squeeze_dims=False) as data_loader,
     ):
         mask, kspace = data_loader.get_kspace_frame(idx)
         if data_loader.slice_2d:
