@@ -364,14 +364,14 @@ class EPI3dAcquisitionSampler(BaseSampler):
         dataset: mrd.Dataset,
         sim_conf: SimConfig,
     ) -> mrd.Dataset:
-        slice_dim = sim_conf.shape[0]
+        slice_dim = sim_conf.shape[2]
         phase_dim = sim_conf.shape[1]
-        readout_dim = sim_conf.shape[2]
+        readout_dim = sim_conf.shape[0]
         
         """Create the acquisitions associated with this sampler."""
         single_frame = self._single_frame(sim_conf)
         n_shots_frame = single_frame.shape[0]
-        n_lines = [1]
+        n_lines = phase_dim
 
         n_samples = single_frame.shape[1]
         TR_vol_ms = sim_conf.seq.TR * single_frame.shape[0]
@@ -399,7 +399,7 @@ class EPI3dAcquisitionSampler(BaseSampler):
         self.log.info("Start Sampling pattern generation")
         counter = 0
         zero_data = np.zeros(
-            (sim_conf.hardware.n_coils, sim_conf.shape[2]), dtype=np.complex64
+            (sim_conf.hardware.n_coils, readout_dim), dtype=np.complex64
         )
 
         # Update the encoding limits.
@@ -409,12 +409,12 @@ class EPI3dAcquisitionSampler(BaseSampler):
         hdr = mrd.xsd.CreateFromDocument(dataset.read_xml_header())
         hdr.encoding[0].encodingLimits = mrd.xsd.encodingLimitsType(
             kspace_encoding_step_0=mrd.xsd.limitType(
-                0, sim_conf.shape[2], sim_conf.shape[2] // 2
+                0, readout_dim, readout_dim // 2
             ),
             kspace_encoding_step_1=mrd.xsd.limitType(
-                0, sim_conf.shape[1], sim_conf.shape[1] // 2
+                0, phase_dim, phase_dim // 2
             ),
-            slice=mrd.xsd.limitType(0, sim_conf.shape[0], sim_conf.shape[0] // 2),
+            slice=mrd.xsd.limitType(0, slice_dim, slice_dim // 2),
             repetition=mrd.xsd.limitType(0, n_ksp_frames, 0),
         )
 
@@ -426,9 +426,9 @@ class EPI3dAcquisitionSampler(BaseSampler):
                 (
                     "data",
                     np.float32,
-                    (sim_conf.hardware.n_coils * sim_conf.shape[2] * 2,), #n_coil*single_frame[1]*2
+                    (sim_conf.hardware.n_coils * readout_dim * 2,), 
                 ),
-                ("traj", np.uint32, (sim_conf.shape[2] * 3,)), #single_frame[1]*3
+                ("traj", np.uint32, (readout_dim * 3,)), 
             ]
         )
 
@@ -468,8 +468,8 @@ class EPI3dAcquisitionSampler(BaseSampler):
             stack_epi3d = self.get_next_frame(sim_conf)  # of shape N_stack, N, 3
             for j, epi2d in enumerate(stack_epi3d):
                 epi2d_r = epi2d.reshape(
-                    sim_conf.shape[1], sim_conf.shape[2], 3
-                )  # reorder to have why reshape to image shape here???
+                    phase_dim, readout_dim, 3
+                )  
                 for k, readout in enumerate(epi2d_r):
                     flags = 0
                     if k == 0:
@@ -511,9 +511,9 @@ class EPI3dAcquisitionSampler(BaseSampler):
                         dtype=mrd.hdf5.acquisition_header_dtype,
                     ).copy()
                     acq_chunk[counter]["data"] = zero_data.view(np.float32).ravel()
-                    acq_chunk[counter]["traj"] = readout.astype(
+                    acq_chunk[counter]["traj"] = readout[:, ::-1].astype(
                         np.uint32, copy=False
-                    ).ravel()
+                    ).ravel() # [1, 72, 60] => [60, 72, 1]
                     counter += 1
                     if counter == current_chunk_size:
                         counter = 0
