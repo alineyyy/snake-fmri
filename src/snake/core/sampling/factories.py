@@ -389,7 +389,7 @@ def rotate_trajectory(
         theta = theta.value
 
     for traj in trajectories:
-        if traj.ndim == 2:
+        if traj.shape[-1] == 2:
             rot = np.array(
                 [[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]]
             )

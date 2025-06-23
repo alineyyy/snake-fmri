@@ -339,8 +339,8 @@ def axis3dcut(
             cax.set_yticks(
                 np.concatenate(
                     [
-                        -np.arange(z_thresh, z_max + 1, 2),
-                        np.arange(z_thresh, z_max + 1, 2),
+                        -np.arange(3, z_max + 1, 2),
+                        np.arange(3, z_max + 1, 2),
                     ]
                 )
             )

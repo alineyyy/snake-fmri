@@ -56,9 +56,9 @@ def reconstruction(cfg: DictConfig) -> None:
         rec_str = str(rec)  # FIXME Also use parameters  of reconstructors
         data_rec_file = Path(f"data_rec_{rec_str}.npy")
         log.info(f"Using {name} reconstructor")
-        with DataLoader(cfg.filename) as data_loader:
+        with DataLoader(cfg.filename, squeeze_dims=False) as data_loader:
             # rec.setup(data_loader.get_sim_conf())
-            data_loader = SliceDataloader(data_loader) if cfg.engine.slice_2d else data_loader
+            #data_loader = SliceDataloader(data_loader) if cfg.engine.slice_2d else data_loader
             rec_data = rec.reconstruct(data_loader)
         log.info(f"Reconstruction done with {name}")
         # Save the reconstruction

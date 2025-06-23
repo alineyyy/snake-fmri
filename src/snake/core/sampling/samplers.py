@@ -15,6 +15,7 @@ from .factories import (
     stacked_epi_factory,
     evi_factory,
     rotate_trajectory,
+    get_kspace_slice_loc
 )
 from snake.mrd_utils.utils import ACQ
 from snake._meta import batched, EnvConfig
@@ -228,9 +229,163 @@ class LoadTrajectorySampler(NonCartesianAcquisitionSampler):
         )[0]
         data = np.minimum(data, 0.5)
         data = np.maximum(data, -0.5)
-        return np.float32(data)
+        return np.float32(data) #single slice (temporary change)
+    
+
+class SequentialLoadTrajectorySampler(LoadTrajectorySampler):
+    """Load a trajectory from a file.
+
+    Parameters
+    ----------
+    constant: bool
+        If True, the trajectory is constant.
+    obs_time_ms: int
+        Time spent to acquire a single shot
+    in_out: bool
+        If true, the trajectory is acquired with a double join pattern
+        from/to the periphery
+    """
+
+    __sampler_name__ = "sequential-load-trajectory"
+    __engine__ = "NUFFT"
+
+    path: list[str]
+    constant: bool = True
+    obs_time_ms: int = 25
+    raster_time: float = 0.01
+    dwell_time: float = 0.01
+    in_out: bool = True
+    frame_index: int = 0
+
+    def _single_frame(self, sim_conf: SimConfig) -> NDArray:
+        """Load the trajectory."""
+        if self.frame_index >= len(self.path):
+            self.frame_index = 0
+        data = read_trajectory(
+            self.path[self.frame_index],
+            dwell_time=self.dwell_time,
+            raster_time=self.raster_time,
+        )[0]
+        data = np.minimum(data, 0.5)
+        data = np.maximum(data, -0.5)
+        self.frame_index += 1
+        return np.float32(data) #single slice (temporary change)
 
 
+class StackedSequentialLoadTrajectorySampler(LoadTrajectorySampler):
+    """Load a  2D trajectory from a file and get a 3D trajectory from it
+    Parameters
+       Parameters
+    ----------
+    acsz: float | int
+        Number/ proportion of lines to be acquired in the center of k-space.
+    accelz: int
+        Acceleration factor for the rest of the lines.
+    directionz: Literal["center-out", "random"]
+        Direction of the acquisition. Either "center-out" or "random".
+    pdfz: Literal["gaussian", "uniform"]
+        Probability density function of the sampling. Either "gaussian" or "uniform".
+    obs_ms: int
+        Time spent to acquire a single shot
+
+    in_out: bool
+        If true, the spiral is acquired with a double join pattern from/to the periphery
+    **wargs:
+      k  Extra arguments (smaps, n_jobs, backend etc...)
+    """
+    __sampler_name__ = "stacked-sequential-load-trajectory"
+    __engine__ = "NUFFT"
+    accelz : int = 0
+    acsz : float | int  = 0.1                # lines or % for calibration 
+    orderz : str = "top-down"
+    path: list[str]
+    constant: bool = True
+    obs_time_ms: int 
+    raster_time: float
+    dwell_time: float
+    in_out: bool = True
+    frame_index: int = 0
+    pdfz = VDSpdf.UNIFORM
+    n_shot_slices: int = 1
+    frame_index = 0
+    constant_2d: bool = True
+
+    def load_2D_traj(self, sim_conf: SimConfig, path, raster_time, dwell_time) -> NDArray:
+        """Load the 2D trajectory."""
+        if self.constant_2d:
+            self.frame_index = 0
+        if self.frame_index >= len(path):
+            self.frame_index = 0 
+        data = read_trajectory(
+            path[self.frame_index],
+            dwell_time=dwell_time,
+            raster_time=raster_time,
+        )[0]
+        data = np.minimum(data, 0.5)
+        data = np.maximum(data, -0.5)
+        self.frame_index += 1
+        return np.float32(data) #single slice (temporary change)
+
+
+    def stack_EPI_Sparkling_factory(
+        self,
+        shape: tuple[int, ...],
+        accelz: int,
+        acsz: int | float,
+        n_samples: int,
+        in_out: bool = True,
+        n_shot_slices: int = 1,
+        orderz: VDSorder = VDSorder.TOP_DOWN,
+        pdfz: VDSpdf = VDSpdf.UNIFORM,
+        raster_time: float = 0.01,
+        dwell_time: float = 0.005,
+        rng: int | None | np.random.Generator = None,
+        sim_conf: SimConfig = None,
+        path :list[str] = {},
+
+    ) -> np.ndarray:
+        """Generate a trajectory of stack of spiral."""
+        sizeZ = shape[-1]
+
+        z_index = get_kspace_slice_loc(sizeZ, acsz, accelz, pdf=pdfz, rng=rng, order=orderz)
+        Traj_EPI_Sparkling_2D = self.load_2D_traj(sim_conf, path, raster_time, dwell_time)    
+
+        z_kspace = (z_index - sizeZ // 2) / sizeZ
+        # create the equivalent 3d trajectory
+        nsamples = Traj_EPI_Sparkling_2D.shape[1] // n_shot_slices
+
+        Traj_EPI_Sparkling_2D = Traj_EPI_Sparkling_2D.reshape(n_shot_slices, nsamples, 2)
+        nz = len(z_kspace)
+        kspace_locs3d = np.zeros((nz * n_shot_slices, nsamples, 3), dtype=np.float32)
+        # TODO use numpy api for this ?
+        for i in range(nz):
+            kspace_locs3d[i * n_shot_slices : (i + 1) * n_shot_slices, :, :2] = (
+                Traj_EPI_Sparkling_2D
+            )
+
+            kspace_locs3d[i * n_shot_slices : (i + 1) * n_shot_slices, :, 2] = z_kspace[i]
+
+        return kspace_locs3d.astype(np.float32)
+
+    def _single_frame(self, sim_conf: SimConfig) -> NDArray:
+        """Generate the sampling pattern."""
+        n_samples = int(self.obs_time_ms / sim_conf.hardware.dwell_time_ms)
+        return self.stack_EPI_Sparkling_factory(
+            shape=sim_conf.shape,
+            accelz=self.accelz,
+            acsz=self.acsz,
+            n_samples=n_samples,
+            pdfz=self.pdfz,
+            orderz=self.orderz,
+            in_out=self.in_out,
+            n_shot_slices=self.n_shot_slices,
+            rng=sim_conf.rng,
+            sim_conf = sim_conf,
+            path = self.path,
+            raster_time=self.raster_time,
+            dwell_time=self.dwell_time,
+        )
+    
 class StackOfSpiralSampler(NonCartesianAcquisitionSampler):
     """
     Spiral 2D Acquisition Handler to generate k-space data.
@@ -271,8 +426,8 @@ class StackOfSpiralSampler(NonCartesianAcquisitionSampler):
 
     def _single_frame(self, sim_conf: SimConfig) -> NDArray:
         """Generate the sampling pattern."""
-        n_samples = int(self.obs_time_ms / sim_conf.hardware.dwell_time_ms)
-        return stack_spiral_factory(
+        n_samples = int(self.obs_time_ms / sim_conf.hardware.raster_time_ms)
+        trajs = stack_spiral_factory(
             shape=sim_conf.shape,
             accelz=self.accelz,
             acsz=self.acsz,
@@ -286,6 +441,14 @@ class StackOfSpiralSampler(NonCartesianAcquisitionSampler):
             n_shot_slices=self.n_shot_slices,
             rng=sim_conf.rng,
         )
+        new_len = int(trajs.shape[1] * (sim_conf.hardware.raster_time_ms /sim_conf.hardware.dwell_time_ms))
+        return np.stack([
+                    np.stack([
+                        np.interp(np.linspace(0, trajs.shape[1] - 1, new_len), np.arange(trajs.shape[1]), trajs[i, :, d])
+                        for d in range(trajs.shape[2])
+                    ], axis=-1)
+                    for i in range(trajs.shape[0])
+                ], axis=0)
 
 
 class RotatedStackOfSpiralSampler(StackOfSpiralSampler):
