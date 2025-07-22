@@ -31,7 +31,6 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
     density_compensation: str | bool | None = False
     nufft_backend: str = "cufinufft"
     restart_strategy: RestartStrategy = RestartStrategy.REFINE
-    method: str = "scipy"
     traj_2d: bool = False
 
     def _reconstruct_nufft(self, data_loader: NonCartesianFrameDataLoader) -> NDArray:
@@ -55,8 +54,6 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
         x_init = x_init_0.copy()
         x_iter = x_init.copy()
         pbar_frames = tqdm(total=data_loader.n_frames, position=0)
-        loss_list = []
-        L_csts = []
         for i, traj, data in data_loader.iter_frames(traj_2d=self.traj_2d):
             if data_loader.slice_2d:
                 nufft_operator.samples = traj.reshape(
@@ -64,20 +61,6 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                 )[0, :, :2]
                 data = np.reshape(data, (data.shape[0], data_loader.n_shots, -1))
                 for j in range(data.shape[1]):
-                    # if self.method == "scipy":
-                    #     x_cg = minimize(
-                    #         fun = lambda x, b=data[:,j]: np.linalg.norm(
-                    #             nufft_operator.op(x.reshape(data_loader.shape[:2])) - b, 
-                    #         )**2, 
-                    #         x0=x_init[:,:,j].ravel(),
-                    #         method="CG",
-                    #         jac=lambda x, b=data[:,j]: nufft_operator.data_consistency(
-                    #             x.reshape(data_loader.shape[:2]), b
-                    #             ).ravel()
-                    #     )
-                    #     loss_list.append(x_cg.fun)
-                    #     x_iter[:,:,j] = x_cg.x.reshape(data_loader.shape[:2])
-                    # else:
                     x_iter[:,:,j] = cg(
                         nufft_operator, 
                         data[:,j], 
@@ -86,7 +69,6 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                         tol=self.tol,
                        
                     )
-
             else:
                 nufft_operator.samples = traj.reshape(
                     data_loader.n_shots, -1, traj.shape[-1]
@@ -99,7 +81,6 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                     tol=self.tol,
           
                 )
-                #loss_list.append(loss)
             x_iter = x_iter.copy() 
             x_init = (
                     x_iter.copy()
@@ -107,10 +88,9 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                     else x_init.copy()
             )
             final_images[i, ...] = x_iter
-        #final_images[0,...] = x_iter
             pbar_frames.update(1)
         if self.restart_strategy != RestartStrategy.REFINE:
-            return final_images,  loss_list
+            return final_images.get()  # Removed .get() to match previous logic
         pbar_frames.reset()
         x_init = x_iter.copy() 
         for i, traj, data in data_loader.iter_frames(traj_2d=self.traj_2d):
@@ -120,21 +100,6 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                 )[0, :, :2]
                 data = np.reshape(data, (data.shape[0], data_loader.n_shots, -1))
                 for j in range(data.shape[1]):
-                    # if self.method == "scipy":
-                    #     x_cg = minimize(
-                    #         fun = lambda x, b=data[:,j]: np.linalg.norm(
-                    #             nufft_operator.op(x.reshape(data_loader.shape[:2])) - b, 
-                    #         )**2, 
-                    #         x0=x_init[:,:,j].ravel(),
-                    #         method="CG",
-                    #         jac=lambda x, b=data[:,j]: nufft_operator.data_consistency(
-                    #             x.reshape(data_loader.shape[:2]), b
-                    #             ).ravel(),  
-                    #         #options={"gtol": self.tol, "maxiter": self.max_iter+1, "alpha_k": None}
-                    #     )
-                    #     loss_list.append(x_cg.fun)
-                    #     x_iter[:,:,j] = x_cg.x.reshape(data_loader.shape[:2])
-                    # else:
                     x_iter[:,:,j] = cg(
                         nufft_operator, 
                         data[:,j], 
@@ -142,9 +107,7 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                         num_iter=self.max_iter, 
                         tol=self.tol,
                      
-                    )
-
-             
+                    )    
             else:
                 nufft_operator.samples = traj.reshape(
                     data_loader.n_shots, -1, traj.shape[-1]
@@ -160,9 +123,8 @@ class ConjugateGradientReconstructor(ZeroFilledReconstructor):
                 #loss_list.append(loss)
 
             final_images[i, ...] = x_iter
-            #final_images[0, ...] = x_iter
             pbar_frames.update(1)
-        return final_images, loss_list
+        return final_images.get()
 
     def _reconstruct_cartesian(self, data_loader: CartesianFrameDataLoader) -> NDArray:
         """Reconstruct the data for Cartesian Settings."""
