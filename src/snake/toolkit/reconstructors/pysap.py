@@ -144,16 +144,19 @@ class ZeroFilledReconstructor(BaseReconstructor):
         final_images = np.empty(
             (data_loader.n_frames, *data_loader.shape), dtype=np.float32
         )
-    
-        # change of density compensation???
+
         for i in tqdm(range(data_loader.n_frames)):
             traj, data = data_loader.get_kspace_frame(i)
-            nufft_operator.samples = traj
-            final_images[i] = abs(nufft_operator.adj_op(data))
-        if data_loader.slice_2d:
-            final_images = np.moveaxis(final_images.reshape(
-                (data_loader.frame_dl.n_frames, -1, *final_images.shape[-2:])
-            ), 1, -1)
+            if data_loader.slice_2d:
+                nufft_operator.samples = traj.reshape(
+                    data_loader.n_shots, -1, traj.shape[-1]
+                )[0, :, :2]
+                data = np.reshape(data, (data.shape[0], data_loader.n_shots, -1))
+                for j in range(data.shape[1]):
+                    final_images[i, :, :, j] = abs(nufft_operator.adj_op(data[:, j]))
+            else:
+                nufft_operator.samples = traj
+                final_images[i] = abs(nufft_operator.adj_op(data))
         return final_images
 
 
